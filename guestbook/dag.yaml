@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: dag-workflow-
+  namespace: argo
+spec:
+  entrypoint: build-test-deploy
+  templates:
+    - name: build-test-deploy
+      dag:
+        tasks:
+          - name: build
+            template: echo
+            arguments:
+              parameters:
+                - name: message
+                  value: "Building application"
+
+          - name: test
+            dependencies: [build]
+            template: echo
+            arguments:
+              parameters:
+                - name: message
+                  value: "Running tests"
+
+          - name: deploy
+            dependencies: [test]
+            template: echo
+            arguments:
+              parameters:
+                - name: message
+                  value: "Deploying to cluster"
+
+    - name: echo
+      inputs:
+        parameters:
+          - name: message
+      container:
+        image: alpine:latest
+        command: ["echo"]
+        args: ["{{inputs.parameters.message}}"]
+

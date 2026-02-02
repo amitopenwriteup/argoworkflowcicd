@@ -1,0 +1,76 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: ci-cicdproject-
+  namespace: argo
+spec:
+  entrypoint: ci-pipeline
+
+  volumeClaimTemplates:
+    - metadata:
+        name: workdir
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+  volumes:
+    - name: docker-config
+      secret:
+        secretName: dockerhub-secret
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+
+  templates:
+    - name: ci-pipeline
+      dag:
+        tasks:
+          - name: clone
+            template: git-clone
+
+          - name: build
+            dependencies: [clone]
+            template: build-image
+
+          - name: push
+            dependencies: [build]
+            template: push-image
+
+    - name: git-clone
+      container:
+        image: alpine/git
+        command: [sh, -c]
+        args:
+          - git clone https://github.com/amitopenwriteup/cicdproject.git /work/source
+        volumeMounts:
+        - name: workdir
+          mountPath: /work
+
+    - name: build-image
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        args:
+          - --dockerfile=/work/source/Dockerfile
+          - --context=/work/source
+          - --destination=docker.io/amitow/cicdproject:{{workflow.uid}}
+          - --no-push
+        volumeMounts:
+          - name: workdir
+            mountPath: /work
+          - name: docker-config
+            mountPath: /kaniko/.docker
+
+    - name: push-image
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        args:
+          - --context=/work/source
+          - --destination=docker.io/amitow/cicdproject:{{workflow.uid}}
+        volumeMounts:
+          - name: workdir
+            mountPath: /work
+          - name: docker-config
+            mountPath: /kaniko/.docker
+
